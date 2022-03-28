@@ -8,6 +8,9 @@ def transform_single_frame(path,module_name,file_name):
     fout = open("out.txt", "wt")
 
     for line in fin:
+        if line.endswith('e\n'):
+            line = line[:-1] + "+00"
+            print(' '.join(line.split()))
         fout.write(' '.join(line.split()))
         fout.write("\n")
 
