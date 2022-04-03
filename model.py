@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 import os
 
 from tensorflow.keras import datasets, layers, models
@@ -43,6 +44,14 @@ def read_trajactory(path, field):
     frames = np.stack((frames), axis=0)
     return frames
 
+def prepare_y_data():
+    data = pd.read_csv("data/WONKA_Equil_MD.csv", sep=",", header=None)
+    org_data = data[2:]
+
+    module_list = org_data[:][0].to_list()
+    pIC50 = org_data[:][3].to_list()
+    return module_list,pIC50
+
 def baseline_model():
     model = models.Sequential()
     model.add(layers.Conv3D(filters=2, kernel_size=3, activation='relu', input_shape=(depth,height,width,input_channels)))
@@ -54,20 +63,22 @@ def baseline_model():
     model.add(layers.Dense(2, activation='relu'))
     model.add(layers.Dense(1))
 
+    model.compile(optimizer='adam',
+            loss=tf.keras.losses.MeanSquaredError(),
+            metrics=['accuracy'])
     return model
 
 def train():
     model = baseline_model()
-    model.compile(optimizer='adam',
-              loss=tf.keras.losses.MeanSquaredError(),
-              metrics=['accuracy'])
-
     history = model.fit(x_train, y_train, epochs=10, 
                         validation_data=(x_test, y_test))
+    return model
+
 
 path = 'data/b2yel/'
 stericMIF = read_trajactory(path, 1)
 elecMIF = read_trajactory(path, 2)
 x_train = np.stack((stericMIF, elecMIF), axis=4)
 y_train = np.ones((10,1))*0.7809668
-train()
+model = train()
+model.save('saved_model/baseline')
