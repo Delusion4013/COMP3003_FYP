@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-
+import os
 
 def identity_block(x, filter):
     # copy tensor to variable called x_skip
@@ -68,18 +68,19 @@ def ResNet34(shape):
     return model
 
 def train():
-    model = ResNet34((109, 104, 85, 3))
+    model = ResNet34((109, 104, 85, 2))
     model.compile(optimizer='adam',
                 loss=tf.keras.losses.MeanSquaredError(),
                 metrics=['accuracy'])
     model.fit(x_train, y_train, epochs=10, 
-                validation_data=(x_test, y_test))
+                validation_data=(x_vald, y_vald))
     
     model.save('saved_model/resNet')
 
 def read_single_frame(path, depth, height, width):
     with open(path, "rb") as f:
         npData = np.load(f)
+        print("reading "+path+" ...")
     frameData = npData.reshape((depth,height,width),order='F') # Using order F to maintain x-y-z order
     return frameData
 
