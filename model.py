@@ -1,8 +1,9 @@
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 import pandas as pd
 import os
-import pickle
+# import pickle
 
 from tensorflow.keras import datasets, layers, models
 # import matplotlib.pyplot as plt
@@ -82,16 +83,20 @@ def baseline_model():
 
     model.compile(optimizer='adam',
             loss=tf.keras.losses.MeanSquaredError(),
-            metrics=['mse','mae'])
+            metrics=['mse','mae',tfa.metrics.RSquare(dtype=tf.float32, y_shape=(1,))])
     return model
 
 def iter(model, module, x_train,y_train, x_test, y_test):
 
-    checkpoint_path = "baseline_checkpoints/"+ module + "/cp.ckpt"
+    checkpoint_path = "baseline_checkpoints/"+ module + "-epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
+
+    csv_output_path = "training_data/baseline_log.csv"
+    csv_logger = tf.keras.callbacks.CSVLogger(csv_output_path, separator=',', append=True)
+    earlystop = tf.keras.callbacks.EarlyStopping(monitor = "val_loss", min_delta=1e-3,patience = 3, verbose = 1)
 
 
     # Create a callback that saves the models' weight
@@ -100,19 +105,19 @@ def iter(model, module, x_train,y_train, x_test, y_test):
                                                      verbose=1)
     history = model.fit(x_train, 
                         y_train, 
-                        epochs=10, 
+                        epochs=100, 
                         validation_data=(x_test, y_test),                        
-                        callbacks=[cp_callback])
+                        callbacks=[cp_callback,earlystop,csv_logger])
 
     # Save history of training
-    history_path = 'saved_history/'+module+'_baseline.txt'
-    history_dir = os.path.dirname(history_path)
+    # history_path = 'saved_history/'+module+'_baseline.txt'
+    # history_dir = os.path.dirname(history_path)
 
-    if not os.path.exists(history_dir):
-        os.makedirs(history_dir)
+    # if not os.path.exists(history_dir):
+    #     os.makedirs(history_dir)
 
-    with open(history_path, 'wb') as file_pi:
-        pickle.dump(history.history, file_pi)
+    # with open(history_path, 'wb') as file_pi:
+    #     pickle.dump(history.history, file_pi)
     
     return model
 
