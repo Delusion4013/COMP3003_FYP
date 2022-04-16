@@ -3,8 +3,10 @@ import tensorflow_addons as tfa
 import numpy as np
 import pandas as pd
 import os
+# import pickle
 
 from tensorflow.keras import datasets, layers, models
+# import matplotlib.pyplot as plt
 
 
 batch_size = 4
@@ -16,11 +18,8 @@ width = 85
 input_channels = 2
 input_shape =(module_count,depth,height,width,input_channels)
 
-instanceCount = 50
+instanceCount = 5
 split = 0.8
-
-model_name = 'baseline-' + str(instanceCount)
-save_path = 'training_data/' + model_name + '/'
 
 def read_single_frame(path,depth, height, width):
     with open(path, "rb") as f:
@@ -79,7 +78,7 @@ def baseline_model():
     model.add(layers.MaxPooling3D(pool_size=2))
 
     model.add(layers.Flatten())
-    model.add(layers.Dense(2, activation='sigmoid'))
+    model.add(layers.Dense(2, activation='relu'))
     model.add(layers.Dense(1))
 
     model.compile(optimizer='adam',
@@ -87,15 +86,15 @@ def baseline_model():
             metrics=['mse','mae',tfa.metrics.RSquare(dtype=tf.float32, y_shape=(1,))])
     return model
 
-def iter(model, x_train,y_train, x_test, y_test):
+def iter(model, module, x_train,y_train, x_test, y_test):
 
-    checkpoint_path = save_path+"checkpoints/epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
+    checkpoint_path = "baseline_checkpoints/"+ module + "-epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
-    csv_output_path = save_path+"log.csv"
+    csv_output_path = "training_data/baseline_log.csv"
     csv_logger = tf.keras.callbacks.CSVLogger(csv_output_path, separator=',', append=True)
     earlystop = tf.keras.callbacks.EarlyStopping(monitor = "val_loss", min_delta=1e-3,patience = 3, verbose = 1)
 
@@ -109,16 +108,22 @@ def iter(model, x_train,y_train, x_test, y_test):
                         epochs=100, 
                         validation_data=(x_test, y_test),                        
                         callbacks=[cp_callback,earlystop,csv_logger])
+
+    # Save history of training
+    # history_path = 'saved_history/'+module+'_baseline.txt'
+    # history_dir = os.path.dirname(history_path)
+
+    # if not os.path.exists(history_dir):
+    #     os.makedirs(history_dir)
+
+    # with open(history_path, 'wb') as file_pi:
+    #     pickle.dump(history.history, file_pi)
     
     return model
 
 def train():
     model = baseline_model()
     labels = read_y_data()
-    X_train = []
-    Y_train = []
-    X_test = []
-    Y_test = []
     for module,target in labels:
         path = 'data/b' + module + '/'
         print("\n=============================================")
@@ -127,34 +132,12 @@ def train():
         if not os.path.exists(path):
             continue
         x_train, x_test = prepare_x_data(path,split,instanceCount)
-        y_train, y_test = prepare_y_data(target,split,instanceCount)
-
-        X_train.append(x_train)
-        Y_train.append(y_train)
-
-        X_test.append(x_test)
-        Y_test.append(y_test)
-
-    Xtr = np.vstack((X_train))
-    Ytr = np.vstack((Y_train))
-    tf.random.set_seed(12)
-    Xtr = tf.random.shuffle(Xtr)
-    tf.random.set_seed(12)
-    Ytr = tf.random.shuffle(Ytr)
-
-    Xte = np.vstack((X_test))
-    Yte = np.vstack((Y_test))
-    tf.random.set_seed(12)
-    Xte = tf.random.shuffle(Xte)
-    tf.random.set_seed(12)
-    Yte = tf.random.shuffle(Yte)
-
-
-    model = iter(model, Xtr, Ytr, Xte, Yte)
-    model_path = save_path+'saved_model/'
+        y_train, y_test = prepare_y_data(target/10,split,instanceCount)
+        model = iter(model, module, x_train, y_train, x_test, y_test)
+    model_path = 'saved_model/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
-    model.save(model_path)
+    model.save('saved_model/baseline')
 
 
 train()

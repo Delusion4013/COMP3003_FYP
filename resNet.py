@@ -1,6 +1,55 @@
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 import os
+
+depth = 109
+height = 104
+width = 85
+input_channels = 2
+
+instanceCount = 50
+split = 0.8
+
+model_name = 'resNet34-' + str(instanceCount)
+save_path = 'training_data/' + model_name + '/'
+
+def read_y_data():
+    data = pd.read_csv("data/bf_w4out4pce.csv", sep=",")
+    label_list = data['PDB'].values
+    y_list = data['pIC50'].values
+    return label_list, y_list
+
+
+def get_4d_couple(parent_path, molecular_name, frame_index):
+    if 0 < frame_index < 10:
+        mol_field1 = parent_path + tf.get_static_value(molecular_name).decode('utf-8') + "/_fld-01_obj-0" + str(frame_index) + ".npy"
+        mol_field2 = parent_path + tf.get_static_value(molecular_name).decode('utf-8') + "/_fld-02_obj-0" + str(frame_index) + ".npy"
+    else:
+        mol_field1 = parent_path + tf.get_static_value(molecular_name).decode('utf-8') + "/_fld-01_obj-" + str(frame_index) + ".npy"
+        mol_field2 = parent_path + tf.get_static_value(molecular_name).decode('utf-8') + "/_fld-02_obj-" + str(frame_index) + ".npy"
+
+    with open(mol_field1, "rb") as f:
+        current_mol1 = np.load(f)
+    current_mol1 = current_mol1.reshape((109,104,85),order='F')
+
+    with open(mol_field2, "rb") as f:
+        current_mol2 = np.load(f)
+    current_mol2 = current_mol2.reshape((109,104,85),order='F')
+    
+    frame = np.stack((current_mol1, current_mol2), axis = 3)
+    return frame
+
+def get_5d_list(parent_path, label_list, frame_index):
+    frames = []
+    for label in label_list:
+        for i in range(1,frame_index+1):
+            frames.append(get_4d_couple(parent_path, label, i))
+    frames = np.stack((frames), axis=0)
+    tf.random.set_seed(12)
+    frames = tf.random.shuffle(frames)
+    return frames
+
 
 def identity_block(x, filter):
     # copy tensor to variable called x_skip
@@ -62,57 +111,72 @@ def ResNet34(shape):
     # Step 4 End Dense Network
     x = tf.keras.layers.AveragePooling3D((2,2,2), padding = 'same')(x)
     x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(512, activation = 'relu')(x)
-    x = tf.keras.layers.Dense(1, activation = 'sigmoid')(x)
+    x = tf.keras.layers.Dense(1000, activation = 'sigmoid')(x)
+    x = tf.keras.layers.Dense(1)(x)
     model = tf.keras.models.Model(inputs = x_input, outputs = x, name = "ResNet34")
+    return model
+
+def iter(model, x_train, y_train, x_test, y_test):
+
+    checkpoint_path = save_path+"checkpoints/-epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
+    csv_output_path = save_path+"log.csv"
+    csv_logger = tf.keras.callbacks.CSVLogger(csv_output_path, separator=',', append=True)
+    earlystop = tf.keras.callbacks.EarlyStopping(monitor = "val_loss", min_delta=1e-3,patience = 3, verbose = 1)
+
+    # Create a callback that saves the models' weight
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                     save_weights_only=True,
+                                                     verbose=1)
+    history = model.fit(x_train, 
+                        y_train, 
+                        epochs=100, 
+                        validation_data=(x_test, y_test),                        
+                        callbacks=[cp_callback,earlystop,csv_logger])
+    
     return model
 
 def train():
     model = ResNet34((109, 104, 85, 2))
     model.compile(optimizer='adam',
                 loss=tf.keras.losses.MeanSquaredError(),
-                metrics=['accuracy'])
-    model.fit(x_train, y_train, epochs=10, 
-                validation_data=(x_vald, y_vald))
+                metrics=['mse','mae'])
+
+    label_list, y_list = read_y_data()
+
+    frame_index = 50
+    train_index = int(len(label_list)/10*8)
     
-    model.save('saved_model/resNet')
+    tf.random.set_seed(12)
+    label_list_shuffled = tf.random.shuffle(label_list)
+    labels_train = label_list_shuffled[:train_index]
+    labels_test = label_list_shuffled[train_index:]
 
-def read_single_frame(path, depth, height, width):
-    with open(path, "rb") as f:
-        npData = np.load(f)
-        print("reading "+path+" ...")
-    frameData = npData.reshape((depth,height,width),order='F') # Using order F to maintain x-y-z order
-    return frameData
+    tf.random.set_seed(12)
+    y_list_shuffled = tf.random.shuffle(y_list)
+    y_list_train = y_list_shuffled[:train_index]
+    y_list_test = y_list_shuffled[train_index:]
 
-def read_trajactory(path, field):
-    frames = []
-    files = os.listdir(path) 
-    files.sort()
-    for file_ in files:
-        f_name = str(file_)
-        if field == 1 and 'fld-01' in f_name:
-            frames.append(read_single_frame(path+f_name, depth, height, width))
-        elif field == 2 and 'fld-02' in f_name:
-            frames.append(read_single_frame(path+f_name, depth, height, width))
-        # else:
-        #     print('Invalid field number')
-    frames = np.stack((frames), axis=0)
-    return frames
+    parent_path = "data/b"
 
-depth = 109
-height = 104
-width = 85
-input_channels = 2
+    X_train = get_5d_list(parent_path, labels_train, frame_index)
+    X_test = get_5d_list(parent_path, labels_test, frame_index)
 
-path = 'data/b2yel/'
-stericMIF = read_trajactory(path, 1)
-elecMIF = read_trajactory(path, 2)
-X = np.stack((stericMIF, elecMIF), axis=4)
-x_train = X[:700]
-x_vald = X[701:901]
-x_test = X[901:]
-Y = np.ones((1001,1))*0.7809668
-y_train = Y[:700]
-y_vald = Y[701:901]
-y_test = Y[901:]
+    tf.random.set_seed(12)
+    Y_train = tf.random.shuffle(np.repeat(y_list_train,frame_index))
+    
+    tf.random.set_seed(12)
+    Y_test = tf.random.shuffle(np.repeat(y_list_test,frame_index))
+
+    model = iter(model, X_train,Y_train,X_test,Y_test)
+
+    model_path = save_path+'saved_model/'
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+    model.save(model_path)
+
 train()

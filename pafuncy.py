@@ -3,8 +3,10 @@ import tensorflow_addons as tfa
 import numpy as np
 import pandas as pd
 import os
+# import pickle
 
 from tensorflow.keras import datasets, layers, models
+# import matplotlib.pyplot as plt
 
 
 batch_size = 4
@@ -16,10 +18,10 @@ width = 85
 input_channels = 2
 input_shape =(module_count,depth,height,width,input_channels)
 
-instanceCount = 50
+instanceCount = 5
 split = 0.8
 
-model_name = 'baseline-' + str(instanceCount)
+model_name = 'baseline-' + instanceCount
 save_path = 'training_data/' + model_name + '/'
 
 def read_single_frame(path,depth, height, width):
@@ -71,25 +73,36 @@ def prepare_y_data(target, split, instanceCount):
     return y_train,y_test
 
 
-def baseline_model():
-    model = models.Sequential()
-    model.add(layers.Conv3D(filters=2, kernel_size=3, activation='relu', input_shape=(depth,height,width,input_channels)))
-    model.add(layers.MaxPooling3D(pool_size=2))
-    model.add(layers.Conv3D(filters=4, kernel_size=2, activation='relu'))
-    model.add(layers.MaxPooling3D(pool_size=2))
+def pafuncy_model():
+    input = tf.keras.layers.Input((109, 104, 85, 2))
 
-    model.add(layers.Flatten())
-    model.add(layers.Dense(2, activation='sigmoid'))
-    model.add(layers.Dense(1))
+    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, activation="relu")(input)
+    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
+    #x = layers.BatchNormalization()(x)
 
-    model.compile(optimizer='adam',
-            loss=tf.keras.losses.MeanSquaredError(),
-            metrics=['mse','mae',tfa.metrics.RSquare(dtype=tf.float32, y_shape=(1,))])
+    x = tf.keras.layers.Conv3D(filters=128, kernel_size=3, activation="relu")(x)
+    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
+    #x = layers.BatchNormalization()(x)
+
+    x = tf.keras.layers.Conv3D(filters=256, kernel_size=3, activation="relu")(x)
+    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
+    #x = layers.BatchNormalization()(x)
+
+    x = tf.keras.layers.Flatten()(x)
+
+    x = tf.keras.layers.Dense(100, activation = 'relu')(x)
+    x = tf.keras.layers.Dense(50, activation = 'relu')(x)
+    x = tf.keras.layers.Dense(20, activation = 'relu')(x)
+
+    output = tf.keras.layers.Dense(units=1, activation="sigmoid")(x)
+
+    model = tf.keras.Model(input, output, name="pafnucylike_CNN")
+
     return model
 
 def iter(model, x_train,y_train, x_test, y_test):
 
-    checkpoint_path = save_path+"checkpoints/epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
+    checkpoint_path = save_path+"checkpoints/-epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     if not os.path.exists(checkpoint_dir):
@@ -109,11 +122,18 @@ def iter(model, x_train,y_train, x_test, y_test):
                         epochs=100, 
                         validation_data=(x_test, y_test),                        
                         callbacks=[cp_callback,earlystop,csv_logger])
+
     
     return model
 
 def train():
-    model = baseline_model()
+    model = pafuncy_model()
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+        loss = 'mse',
+        metrics = ['mae', tfa.metrics.RSquare(dtype=tf.float32, y_shape=(1,))]
+    )  
+    print("Started Training...\n\n")
     labels = read_y_data()
     X_train = []
     Y_train = []
@@ -149,13 +169,14 @@ def train():
     tf.random.set_seed(12)
     Yte = tf.random.shuffle(Yte)
 
-
+    
+    model.summary()
     model = iter(model, Xtr, Ytr, Xte, Yte)
+
     model_path = save_path+'saved_model/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)
     model.save(model_path)
-
 
 train()
 
