@@ -21,7 +21,7 @@ def transform_single_frame(path,module_name,file_name):
 
     npy_name = file_name.split(".")[0]+".npy"
 
-    fout = open(f"data/b{module_name}/{npy_name}", "wb")
+    fout = open(f"data/{npy_name}", "wb")
     np.save(fout, npdata)
 
 
@@ -43,4 +43,6 @@ def traverse_directory(path):
             if file_ in module_name:
                 transform_trajactory(path+file_+"/", file_)
 
-traverse_directory("data/")
+# traverse_directory("data/")
+
+transform_single_frame("data/","4cfl","_fld-02_obj-01.agrd")
