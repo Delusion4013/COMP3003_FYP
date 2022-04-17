@@ -68,48 +68,5 @@
 
 ## Reference
 
-- Commands
-
-- \1. Open the Open3DQSAR software program.
-
-   
-
-  \2. Load one of the SDF files from the data set with the reduced sampling rate (trajectories_aligned_reduced_max_min):
-
-  Eg. import type=SDF file=C:\trajectories_aligned_reduced_max_min\2yel.sdf
-
-   
-
-  \3. Setup a MIF grid size. I've determined that a 0.333 Angstrom step size is probably the optimal balance for our needs here:
-
-  Ie. box step=0.333
-
-   
-
-  \4. Calculate the steric MIF:
-
-  Ie. calc_field type=VDW
-
-   
-
-  \5. Calculate the electrostatic MIF:
-
-  Ie. calc_field type=MM_ELE
-
-   
-
-  \6. Export the MIF data as ASCII files:
-
-  Ie. export type=object_field format=xyz file=C:\ object_list=all
-
-   
-
-  \7. Find the MIF files and delete the last six of them for both the VDW and ELE MIFs, as these are just there to make the grids the same size, and are not part of the data set:
-
-  Ie. Find and delete the MIFs with names "object_list=all_fld-01_obj-1002" to "object_list=all_fld-01_obj-1007" and "object_list=all_fld-02_obj-1002" to "object_list=all_fld-02_obj-1007".
-
-   
-
-  \8. Repeat steps 1-7 for all 72 SDF files.
 
 - [Downloading RDKit](https://www.rdkit.org/docs/Install.html)
