@@ -18,10 +18,10 @@ width = 85
 input_channels = 2
 input_shape =(module_count,depth,height,width,input_channels)
 
-instanceCount = 5
+instanceCount = 20
 split = 0.8
 
-model_name = 'baseline-' + instanceCount
+model_name = 'pafuncy-' + str(instanceCount)
 save_path = 'training_data/' + model_name + '/'
 
 def read_single_frame(path,depth, height, width):
@@ -94,7 +94,7 @@ def pafuncy_model():
     x = tf.keras.layers.Dense(50, activation = 'relu')(x)
     x = tf.keras.layers.Dense(20, activation = 'relu')(x)
 
-    output = tf.keras.layers.Dense(units=1, activation="sigmoid")(x)
+    output = tf.keras.layers.Dense(units=1, activation="relu")(x)
 
     model = tf.keras.Model(input, output, name="pafnucylike_CNN")
 
@@ -129,50 +129,18 @@ def iter(model, x_train,y_train, x_test, y_test):
 def train():
     model = pafuncy_model()
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+        optimizer='adam',
         loss = 'mse',
         metrics = ['mae', tfa.metrics.RSquare(dtype=tf.float32, y_shape=(1,))]
     )  
     print("Started Training...\n\n")
-    labels = read_y_data()
-    X_train = []
-    Y_train = []
-    X_test = []
-    Y_test = []
-    for module,target in labels:
-        path = 'data/b' + module + '/'
-        print("\n=============================================")
-        print("Training on "+path+" ...")
-        print("=============================================\n")
-        if not os.path.exists(path):
-            continue
-        x_train, x_test = prepare_x_data(path,split,instanceCount)
-        y_train, y_test = prepare_y_data(target,split,instanceCount)
+    X_train = np.load("/home/scycw2/training_data/resNet34-20/raw_data_20/X_train.npy")
+    X_test = np.load("/home/scycw2/training_data/resNet34-20/raw_data_20/X_test.npy")
+    Y_train = np.load("/home/scycw2/training_data/resNet34-20/raw_data_20/Y_train.npy")
+    Y_test = np.load("/home/scycw2/training_data/resNet34-20/raw_data_20/Y_test.npy")
 
-        X_train.append(x_train)
-        Y_train.append(y_train)
 
-        X_test.append(x_test)
-        Y_test.append(y_test)
-
-    Xtr = np.vstack((X_train))
-    Ytr = np.vstack((Y_train))
-    tf.random.set_seed(12)
-    Xtr = tf.random.shuffle(Xtr)
-    tf.random.set_seed(12)
-    Ytr = tf.random.shuffle(Ytr)
-
-    Xte = np.vstack((X_test))
-    Yte = np.vstack((Y_test))
-    tf.random.set_seed(12)
-    Xte = tf.random.shuffle(Xte)
-    tf.random.set_seed(12)
-    Yte = tf.random.shuffle(Yte)
-
-    
-    model.summary()
-    model = iter(model, Xtr, Ytr, Xte, Yte)
-
+    model = iter(model, X_train, Y_train, X_test, Y_test)
     model_path = save_path+'saved_model/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)

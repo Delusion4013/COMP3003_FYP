@@ -16,7 +16,7 @@ width = 85
 input_channels = 2
 input_shape =(module_count,depth,height,width,input_channels)
 
-instanceCount = 50
+instanceCount = 5
 split = 0.8
 
 model_name = 'baseline-' + str(instanceCount)
@@ -49,27 +49,29 @@ def read_y_data():
     n = data.values
     return n
 
-def prepare_x_data(path, split, instanceCount):
+def load_x_data(path, split, instanceCount):
     trainFrameCount = int(instanceCount*split)
 
     stericMIF = read_trajactory(path, 1,instanceCount)
     elecMIF = read_trajactory(path, 2,instanceCount)
     X = np.stack((stericMIF, elecMIF), axis=4)
 
-    x_train = X[:trainFrameCount]
-    x_test = X[trainFrameCount:]
+    # x_train = X[:trainFrameCount]
+    # x_test = X[trainFrameCount:]
     
-    return x_train, x_test
+    # return x_train, x_test
+    return X
 
-def prepare_y_data(target, split, instanceCount):
+def load_y_data(target, split, instanceCount):
     trainFrameCount = int(instanceCount*split)
     
     Y = np.ones((instanceCount,1))*target
-    y_train = Y[:trainFrameCount]
-    y_test = Y[trainFrameCount:]
 
-    return y_train,y_test
+    # y_train = Y[:trainFrameCount]
+    # y_test = Y[trainFrameCount:]
 
+    # return y_train,y_test
+    return Y
 
 def baseline_model():
     model = models.Sequential()
@@ -106,19 +108,32 @@ def iter(model, x_train,y_train, x_test, y_test):
                                                      verbose=1)
     history = model.fit(x_train, 
                         y_train, 
-                        epochs=100, 
+                        epochs=3, 
                         validation_data=(x_test, y_test),                        
                         callbacks=[cp_callback,earlystop,csv_logger])
     
     return model
 
+def prepareData(data, split,instanceCount):
+
+    tf.random.set_seed(12)
+    data_shuffled = tf.random.shuffle(data)
+    
+    trainFrameCount = int(instanceCount*split)
+    data_train = data_shuffled[:trainFrameCount]
+    data_test = data_shuffled[trainFrameCount:]
+
+    return data_train, data_test
+
 def train():
     model = baseline_model()
     labels = read_y_data()
-    X_train = []
-    Y_train = []
-    X_test = []
-    Y_test = []
+    # X_train = []
+    # Y_train = []
+    # X_test = []
+    # Y_test = []
+    X = []
+    Y = []
     for module,target in labels:
         path = 'data/b' + module + '/'
         print("\n=============================================")
@@ -126,31 +141,41 @@ def train():
         print("=============================================\n")
         if not os.path.exists(path):
             continue
-        x_train, x_test = prepare_x_data(path,split,instanceCount)
-        y_train, y_test = prepare_y_data(target,split,instanceCount)
+        # x_train, x_test = load_x_data(path,split,instanceCount)
+        X.append(load_x_data(path,split,instanceCount))
+        # y_train, y_test = load_y_data(target,split,instanceCount)
+        Y.append(load_y_data(target,split,instanceCount))
 
-        X_train.append(x_train)
-        Y_train.append(y_train)
+        # X_train.append(x_train)
+        # Y_train.append(y_train)
 
-        X_test.append(x_test)
-        Y_test.append(y_test)
+        # X_test.append(x_test)
+        # Y_test.append(y_test)
 
-    Xtr = np.vstack((X_train))
-    Ytr = np.vstack((Y_train))
-    tf.random.set_seed(12)
-    Xtr = tf.random.shuffle(Xtr)
-    tf.random.set_seed(12)
-    Ytr = tf.random.shuffle(Ytr)
+    X_train, X_test = prepareData(np.vstack(X), split, instanceCount)
 
-    Xte = np.vstack((X_test))
-    Yte = np.vstack((Y_test))
-    tf.random.set_seed(12)
-    Xte = tf.random.shuffle(Xte)
-    tf.random.set_seed(12)
-    Yte = tf.random.shuffle(Yte)
+    Y = np.vstack(Y)
+    Y = (Y - min(Y))/(max(Y)-min(Y))
+    Y_train, Y_test = prepareData(Y, split, instanceCount)
+
+    # Xtr = np.vstack((X_train))
+    # Ytr = np.vstack((Y_train))
+    # Ytr = (Ytr - min(Ytr))/(max(Ytr)-min(Ytr))
+    # tf.random.set_seed(12)
+    # Xtr = tf.random.shuffle(Xtr)
+    # tf.random.set_seed(12)
+    # Ytr = tf.random.shuffle(Ytr)
+
+    # Xte = np.vstack((X_test))
+    # Yte = np.vstack((Y_test))
+    # Yte = (Yte - min(Yte))/(max(Yte)-min(Yte))
+    # tf.random.set_seed(12)
+    # Xte = tf.random.shuffle(Xte)
+    # tf.random.set_seed(12)
+    # Yte = tf.random.shuffle(Yte)
 
 
-    model = iter(model, Xtr, Ytr, Xte, Yte)
+    model = iter(model, X_train, Y_train, X_test, Y_test)
     model_path = save_path+'saved_model/'
     if not os.path.exists(model_path):
         os.makedirs(model_path)

@@ -8,11 +8,11 @@ height = 104
 width = 85
 input_channels = 2
 
-instanceCount = 50
+instanceCount = 5
 split = 0.8
 
 model_name = 'resNet34-' + str(instanceCount)
-save_path = 'training_data/' + model_name + '/'
+save_path = '/home/scycw2/training_data/' + model_name + '/'
 
 def read_y_data():
     data = pd.read_csv("data/bf_w4out4pce.csv", sep=",")
@@ -44,7 +44,7 @@ def get_5d_list(parent_path, label_list, frame_index):
     frames = []
     for label in label_list:
         for i in range(1,frame_index+1):
-            frames.append(get_4d_couple(parent_path, label, i))
+            frames.append(get_4d_couple(parent_path, label, i*100+1))
     frames = np.stack((frames), axis=0)
     tf.random.set_seed(12)
     frames = tf.random.shuffle(frames)
@@ -60,7 +60,7 @@ def identity_block(x, filter):
     x = tf.keras.layers.Activation('relu')(x)
     # Layer 2
     x = tf.keras.layers.Conv3D(filter, (3,3,3), strides=(1,1,1), padding = 'same', data_format = "channels_last")(x)
-    x = tf.keras.layers.BatchNormalization(axis=3)(x)
+    x = tf.keras.layers.BatchNormalization(axis=4)(x)
     # Add Residue
     x = tf.keras.layers.Add()([x, x_skip])     
     x = tf.keras.layers.Activation('relu')(x)
@@ -86,9 +86,8 @@ def convolutional_block(x, filter):
 def ResNet34(shape):
     # Step 1 (Setup Input Layer)
     x_input = tf.keras.layers.Input(shape)
-    x = tf.keras.layers.ZeroPadding3D((3, 3,3))(x_input)
     # Step 2 (Initial Conv layer along with maxPool)
-    x = tf.keras.layers.Conv3D(64, kernel_size=(7,7,7), strides=(2,2,2), padding='same')(x)
+    x = tf.keras.layers.Conv3D(64, kernel_size=(7,7,7), strides=(2,2,2), padding='same')(x_input)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
     x = tf.keras.layers.MaxPool3D(pool_size=(3,3,3), strides=(2,2,2), padding='same')(x)
@@ -118,7 +117,7 @@ def ResNet34(shape):
 
 def iter(model, x_train, y_train, x_test, y_test):
 
-    checkpoint_path = save_path+"checkpoints/-epoch_{epoch:02d}-loss_{val_loss:.2f}_cp.ckpt"
+    checkpoint_path = save_path+"checkpoints/epoch_{epoch:02d}-cp.ckpt"
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     if not os.path.exists(checkpoint_dir):
@@ -134,9 +133,10 @@ def iter(model, x_train, y_train, x_test, y_test):
                                                      verbose=1)
     history = model.fit(x_train, 
                         y_train, 
-                        epochs=100, 
+                        epochs=20, 
+                        batch_size=64,
                         validation_data=(x_test, y_test),                        
-                        callbacks=[cp_callback,earlystop,csv_logger])
+                        callbacks=[cp_callback,csv_logger])
     
     return model
 
@@ -146,37 +146,58 @@ def train():
                 loss=tf.keras.losses.MeanSquaredError(),
                 metrics=['mse','mae'])
 
-    label_list, y_list = read_y_data()
-
-    frame_index = 50
-    train_index = int(len(label_list)/10*8)
+    # label_list, y_list = read_y_data()
     
-    tf.random.set_seed(12)
-    label_list_shuffled = tf.random.shuffle(label_list)
-    labels_train = label_list_shuffled[:train_index]
-    labels_test = label_list_shuffled[train_index:]
+    # # Min-max rescaling
+    # y_list = (y_list - min(y_list))/(max(y_list)-min(y_list))
 
-    tf.random.set_seed(12)
-    y_list_shuffled = tf.random.shuffle(y_list)
-    y_list_train = y_list_shuffled[:train_index]
-    y_list_test = y_list_shuffled[train_index:]
-
-    parent_path = "data/b"
-
-    X_train = get_5d_list(parent_path, labels_train, frame_index)
-    X_test = get_5d_list(parent_path, labels_test, frame_index)
-
-    tf.random.set_seed(12)
-    Y_train = tf.random.shuffle(np.repeat(y_list_train,frame_index))
+    # train_index = int(len(label_list)/10*8)
     
-    tf.random.set_seed(12)
-    Y_test = tf.random.shuffle(np.repeat(y_list_test,frame_index))
+    # tf.random.set_seed(12)
+    # label_list_shuffled = tf.random.shuffle(label_list)
+    # labels_train = label_list_shuffled[:train_index]
+    # labels_test = label_list_shuffled[train_index:]
 
-    model = iter(model, X_train,Y_train,X_test,Y_test)
+    # tf.random.set_seed(12)
+    # y_list_shuffled = tf.random.shuffle(y_list)
+    # y_list_train = y_list_shuffled[:train_index]
+    # y_list_test = y_list_shuffled[train_index:]
 
-    model_path = save_path+'saved_model/'
-    if not os.path.exists(model_path):
-        os.makedirs(model_path)
-    model.save(model_path)
+    # parent_path = "data/b"
+
+    # X_train = get_5d_list(parent_path, labels_train, instanceCount)
+    # X_test = get_5d_list(parent_path, labels_test, instanceCount)
+
+    # tf.random.set_seed(12)
+    # Y_train = tf.random.shuffle(np.repeat(y_list_train,instanceCount))
+    
+    # tf.random.set_seed(12)
+    # Y_test = tf.random.shuffle(np.repeat(y_list_test,instanceCount))
+
+    model.summary()
+
+
+    # if not os.path.exists(save_path+"raw_data_10/"):
+    #     os.makedirs(save_path+"raw_data_10/")
+
+
+    # with open(save_path+"raw_data_10/X_train.npy", "wb") as f:
+    #     np.save(f, X_train)
+
+    # with open(save_path+"raw_data_10/Y_train.npy", "wb") as f:
+    #     np.save(f, Y_train)
+
+    # with open(save_path+"raw_data_10/X_test.npy", "wb") as f:
+    #     np.save(f, X_test)
+
+    # with open(save_path+"raw_data_10/Y_test.npy", "wb") as f:
+    #     np.save(f, Y_test)
+
+    # model = iter(model, X_train,Y_train,X_test,Y_test)
+
+    # model_path = save_path+'saved_model/'
+    # if not os.path.exists(model_path):
+    #     os.makedirs(model_path)
+    # model.save(model_path)
 
 train()
